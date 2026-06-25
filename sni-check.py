@@ -402,7 +402,10 @@ def main():
             seen.add(d); uniq.append(d)
     domains = uniq
 
-    print(f"\n{C.BOLD}Проверяю {len(domains)} доменов "
+    server = server_ip()
+    print(f"\n{C.BOLD}Сервер: {col(server, C.B)}{C.RST}  "
+          f"{C.GR}(hostname: {socket.gethostname()}){C.RST}")
+    print(f"{C.BOLD}Проверяю {len(domains)} доменов "
           f"(порт {args.port}, таймаут {args.timeout}s)...{C.RST}\n")
 
     results = []
@@ -464,29 +467,43 @@ def main():
         ]
         print("".join(pad(s, w) for s, w in row))
 
-    # ---- лучший ----
-    best = None
-    for r in results:
-        _, sc = verdict(r)
-        if sc == 2:  # полностью подходит
-            best = r
-            break
+    # ---- топ-5 лучших ----
+    picks = [r for r in results if verdict(r)[1] == 2][:5]
+    fallback = False
+    if not picks:  # идеальных нет — берём лучшие «с оговоркой»
+        picks = [r for r in results if verdict(r)[1] == 1][:5]
+        fallback = True
 
     print()
-    if best:
-        print(col("━" * 60, C.G))
-        print(f"{C.BOLD}{C.G}🏆 ЛУЧШИЙ ВЫБОР: {best['host']}{C.RST}  "
-              f"({best['ping']:.0f}ms, {best['curve']})")
-        print(col("━" * 60, C.G))
-        print(f"\n{C.BOLD}Вставьте в realitySettings:{C.RST}\n")
-        print(f'  "dest": "{best["host"]}:443",')
-        print(f'  "serverNames": ["{best["host"]}"],')
-        print(f"\n{C.Y}⚠ В remnawave SNI в настройках Host тоже поменяйте "
-              f"на {best['host']}{C.RST}\n")
-    else:
-        print(col("Не нашлось идеального кандидата (все с ⚠ или ✗). "
-                  "Возьмите лучший '⚠' с низким пингом и без CDN.", C.Y))
-        print()
+    print(col("━" * 64, C.G))
+    print(f"{C.BOLD}{C.G}🏆 ТОП-{len(picks)} SNI для сервера "
+          f"{server}{C.RST}")
+    print(col("━" * 64, C.G))
+
+    if not picks:
+        print(col("Не нашлось годных кандидатов. Проверьте сеть/таймаут "
+                  "(--timeout 10) или добавьте --country.", C.Y) + "\n")
+        return
+
+    if fallback:
+        print(col("⚠ Идеальных (✓) не нашлось — показаны лучшие с оговоркой. "
+                  "Проверяйте боем!", C.Y))
+
+    marks = ["①", "②", "③", "④", "⑤"]
+    for i, r in enumerate(picks):
+        m = marks[i] if i < len(marks) else f"{i + 1}."
+        curve = r["curve"] if "X25519" in r["curve"] else col(r["curve"], C.Y)
+        print(f"  {C.BOLD}{m}{C.RST}  {col(pad(r['host'], 30), C.B)} "
+              f"{r['ping']:.0f}ms   {curve}")
+
+    b = picks[0]
+    print(f"\n{C.BOLD}Готовый конфиг (вариант ①, лучший):{C.RST}\n")
+    print(f'  "dest": "{b["host"]}:443",')
+    print(f'  "serverNames": ["{b["host"]}"],')
+    print(f"\n{C.GR}Если ① будет нестабилен — ставьте ②, ③ и т.д. из списка выше."
+          f"{C.RST}")
+    print(f"{C.Y}⚠ В remnawave SNI в настройках Host тоже поменяйте на "
+          f"{b['host']}{C.RST}\n")
 
 
 if __name__ == "__main__":
