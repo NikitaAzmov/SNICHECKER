@@ -31,21 +31,152 @@ import subprocess
 import sys
 import time
 
-# --- встроенный список стабильных кандидатов под Reality (лето 2026) ---
-DEFAULT_DOMAINS = [
-    "images.apple.com",
-    "www.apple.com",
-    "gateway.icloud.com",
+# --- ГЛОБАЛЬНЫЕ бренды (нейтральны к гео, проверяются всегда) ---
+GLOBAL_DOMAINS = [
+    # Apple
+    "www.apple.com", "images.apple.com", "gateway.icloud.com", "www.icloud.com",
+    "support.apple.com", "swcdn.apple.com",
+    # Microsoft
+    "www.microsoft.com", "www.bing.com", "www.office.com", "www.xbox.com",
+    "www.msn.com", "www.skype.com", "www.visualstudio.com",
+    # Google
+    "dl.google.com", "www.google.com", "www.youtube.com", "storage.googleapis.com",
+    "www.gstatic.com", "fonts.googleapis.com",
+    # Amazon
+    "aws.amazon.com", "www.amazon.com", "m.media-amazon.com",
+    # Yahoo
     "www.yahoo.com",
-    "dl.google.com",
-    "www.nvidia.com",
-    "www.swift.com",
-    "fallback.cdn-tinkoff.ru",
-    "userapi.com",
-    "max.ru",
-    "aws.amazon.com",
-    "www.amd.com",
+    # железо
+    "www.nvidia.com", "www.amd.com", "www.intel.com", "www.qualcomm.com",
+    "www.dell.com", "www.hp.com", "www.lenovo.com", "www.asus.com",
+    "www.tesla.com", "www.samsung.com", "www.lg.com",
+    # финансы
+    "www.swift.com", "www.visa.com", "www.mastercard.com", "www.paypal.com",
+    "www.americanexpress.com", "www.jpmorgan.com",
+    # технологии / медиа
+    "www.netflix.com", "www.spotify.com", "www.linkedin.com", "www.tiktok.com",
+    "www.adobe.com", "www.oracle.com", "www.ibm.com", "www.cisco.com",
+    "www.salesforce.com", "www.sap.com", "www.dropbox.com", "www.atlassian.com",
+    "www.gitlab.com", "www.python.org", "www.mozilla.org", "en.wikipedia.org",
+    "www.reddit.com", "www.twitch.tv", "www.ebay.com", "www.booking.com",
+    "www.airbnb.com", "www.pinterest.com", "zoom.us",
 ]
+
+# --- ЛОКАЛЬНЫЕ домены по странам (код ISO -> список) ---
+# Подбираются по флагу --country XX. Дают минимальный пинг для ноды в этой стране.
+COUNTRY_DOMAINS = {
+    "de": [  # Германия
+        "www.bmw.de", "www.mercedes-benz.com", "www.volkswagen.de",
+        "www.siemens.com", "www.bosch.com", "www.deutsche-bank.de",
+        "www.commerzbank.de", "www.telekom.de", "www.spiegel.de",
+        "www.bild.de", "www.zalando.de", "www.dhl.de", "www.lufthansa.com",
+        "www.allianz.de", "www.sparkasse.de", "www.1und1.de",
+    ],
+    "fi": [  # Финляндия
+        "www.nokia.com", "www.elisa.fi", "www.telia.fi", "www.op.fi",
+        "www.nordea.fi", "www.yle.fi", "www.hs.fi", "www.kesko.fi",
+        "www.finnair.com", "www.fortum.com", "www.s-pankki.fi",
+    ],
+    "us": [  # США
+        "www.cnn.com", "www.nytimes.com", "www.walmart.com", "www.target.com",
+        "www.bankofamerica.com", "www.wellsfargo.com", "www.chase.com",
+        "www.att.com", "www.verizon.com", "www.comcast.com", "www.ford.com",
+        "www.gm.com", "www.costco.com", "www.homedepot.com",
+    ],
+    "fr": [  # Франция
+        "www.orange.fr", "www.sfr.fr", "www.free.fr", "www.bnpparibas",
+        "www.societegenerale.fr", "www.creditagricole.fr", "www.lemonde.fr",
+        "www.lefigaro.fr", "www.leboncoin.fr", "www.carrefour.fr",
+        "www.sncf.com", "www.airfrance.fr", "www.loreal.com",
+    ],
+    "nl": [  # Нидерланды
+        "www.ing.nl", "www.rabobank.nl", "www.abnamro.nl", "www.kpn.com",
+        "www.bol.com", "www.nu.nl", "www.telegraaf.nl", "www.ah.nl",
+        "www.klm.com", "www.philips.com", "www.asml.com",
+    ],
+    "se": [  # Швеция
+        "www.ericsson.com", "www.telia.se", "www.tele2.se", "www.swedbank.se",
+        "www.seb.se", "www.handelsbanken.se", "www.svt.se",
+        "www.aftonbladet.se", "www.ikea.com", "www.volvocars.com", "www.hm.com",
+    ],
+    "gb": [  # Великобритания
+        "www.bbc.co.uk", "www.theguardian.com", "www.hsbc.co.uk",
+        "www.barclays.co.uk", "www.lloydsbank.com", "www.vodafone.co.uk",
+        "www.bt.com", "www.tesco.com", "www.sky.com", "www.britishairways.com",
+    ],
+    "pl": [  # Польша
+        "www.pkobp.pl", "www.onet.pl", "www.wp.pl", "www.allegro.pl",
+        "www.orange.pl", "www.play.pl", "www.gazeta.pl", "www.interia.pl",
+    ],
+    "it": [  # Италия
+        "www.tim.it", "www.vodafone.it", "www.unicredit.it",
+        "www.intesasanpaolo.com", "www.repubblica.it", "www.corriere.it",
+        "www.ferrari.com", "www.eni.com",
+    ],
+    "es": [  # Испания
+        "www.telefonica.com", "www.movistar.es", "www.bbva.es",
+        "www.santander.com", "www.elpais.com", "www.elmundo.es",
+        "www.zara.com", "www.iberia.com",
+    ],
+    "no": [  # Норвегия
+        "www.telenor.no", "www.dnb.no", "www.vg.no", "www.nrk.no",
+        "www.equinor.com", "www.finn.no",
+    ],
+    "dk": [  # Дания
+        "www.danskebank.dk", "www.tdc.dk", "www.dr.dk", "www.maersk.com",
+        "www.novonordisk.com", "www.lego.com",
+    ],
+    "ch": [  # Швейцария
+        "www.ubs.com", "www.swisscom.ch", "www.nestle.com", "www.roche.com",
+        "www.novartis.com", "www.swiss.com",
+    ],
+    "at": [  # Австрия
+        "www.a1.net", "www.erstebank.at", "www.orf.at", "www.derstandard.at",
+        "www.redbull.com",
+    ],
+    "cz": [  # Чехия
+        "www.seznam.cz", "www.cez.cz", "www.csob.cz", "www.idnes.cz",
+    ],
+    "be": [  # Бельгия
+        "www.kbc.be", "www.proximus.be", "www.standaard.be", "www.delhaize.be",
+    ],
+    "ie": [  # Ирландия
+        "www.aib.ie", "www.bankofireland.com", "www.rte.ie",
+        "www.independent.ie",
+    ],
+    "pt": [  # Португалия
+        "www.sapo.pt", "www.publico.pt", "www.cgd.pt", "www.continente.pt",
+    ],
+    "ro": [  # Румыния
+        "www.emag.ro", "www.bnr.ro", "www.digi24.ro",
+    ],
+    "tr": [  # Турция
+        "www.turkcell.com.tr", "www.garantibbva.com.tr", "www.hurriyet.com.tr",
+        "www.trendyol.com",
+    ],
+    "ca": [  # Канада
+        "www.rbc.com", "www.td.com", "www.bell.ca", "www.rogers.com",
+        "www.cbc.ca", "www.shopify.com",
+    ],
+    "jp": [  # Япония
+        "www.rakuten.co.jp", "www.nintendo.co.jp", "www.sony.co.jp",
+        "www.nikkei.com", "www.softbank.jp", "www.docomo.ne.jp", "www.au.com",
+        "line.me", "www.mufg.jp", "www.jal.co.jp", "www.ana.co.jp",
+        "www.toyota.jp", "global.canon", "www.fujitsu.com", "www.ntt.com",
+        "www.kddi.com",
+    ],
+    "ru": [  # Россия
+        "ya.ru", "dzen.ru", "userapi.com", "vk.com", "ok.ru", "mail.ru",
+        "max.ru", "avito.ru", "www.ozon.ru", "www.wildberries.ru",
+        "www.tbank.ru", "fallback.cdn-tinkoff.ru", "www.gosuslugi.ru",
+        "rutube.ru", "www.mts.ru", "www.megafon.ru", "2gis.ru", "hh.ru",
+        "www.sber.ru",
+    ],
+}
+
+# европейские страны для алиаса --country eu
+EU_CODES = ["de", "fi", "fr", "nl", "se", "gb", "pl", "it", "es", "no",
+            "dk", "ch", "at", "cz", "be", "ie", "pt", "ro"]
 
 # ---- цвета ----
 class C:
@@ -198,16 +329,51 @@ def load_csv(path):
 def main():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("domains", nargs="*", help="домены для проверки")
+    ap.add_argument("--country", nargs="*", default=[],
+                    help="коды стран (de fi us fr nl se ...), 'eu' = вся Европа, "
+                         "'all' = все страны. Добавляет локальные домены к глобальным.")
+    ap.add_argument("--list-countries", action="store_true",
+                    help="показать доступные коды стран и выйти")
     ap.add_argument("--csv", help="файл вывода RealiTLScanner (reality_sni.csv)")
     ap.add_argument("--port", type=int, default=443)
     ap.add_argument("--timeout", type=int, default=6)
+    ap.add_argument("--top", type=int, default=15,
+                    help="сколько лучших доменов показать (0 = все)")
     args = ap.parse_args()
+
+    if args.list_countries:
+        print(f"\n{C.BOLD}Доступные коды стран:{C.RST}")
+        for code in sorted(COUNTRY_DOMAINS):
+            tag = col("EU", C.B) if code in EU_CODES else "  "
+            print(f"  {code}  {tag}  ({len(COUNTRY_DOMAINS[code])} доменов)")
+        print(f"\nАлиасы: {col('eu', C.G)} = вся Европа, "
+              f"{col('all', C.G)} = все страны")
+        print(f"Пример: {C.B}python3 sni.py --country de fi{C.RST}\n")
+        return
+
+    # разбираем коды стран (поддержка 'de,fi' и 'de fi')
+    codes = []
+    for part in args.country:
+        for c in part.replace(",", " ").split():
+            c = c.lower()
+            if c == "eu":
+                codes += EU_CODES
+            elif c == "all":
+                codes += list(COUNTRY_DOMAINS)
+            else:
+                codes.append(c)
+    for c in codes:
+        if c not in COUNTRY_DOMAINS:
+            print(f"{C.Y}неизвестный код страны: {c} "
+                  f"(см. --list-countries){C.RST}", file=sys.stderr)
 
     domains = list(args.domains)
     if args.csv:
         domains += load_csv(args.csv)
     if not domains:
-        domains = list(DEFAULT_DOMAINS)
+        domains = list(GLOBAL_DOMAINS)
+        for c in codes:
+            domains += COUNTRY_DOMAINS.get(c, [])
     # дедуп с сохранением порядка
     seen, uniq = set(), []
     for d in domains:
@@ -219,10 +385,14 @@ def main():
           f"(порт {args.port}, таймаут {args.timeout}s)...{C.RST}\n")
 
     results = []
-    with cf.ThreadPoolExecutor(max_workers=16) as ex:
+    done = 0
+    with cf.ThreadPoolExecutor(max_workers=24) as ex:
         futs = {ex.submit(check, d, args.port, args.timeout): d for d in domains}
         for fu in cf.as_completed(futs):
             results.append(fu.result())
+            done += 1
+            print(f"\r  проверено {done}/{len(domains)}...", end="", flush=True)
+    print("\r" + " " * 40 + "\r", end="")  # стираем прогресс
 
     # ранжируем: сначала по score (подходит>warn>нет), потом по пингу
     def keyf(r):
@@ -230,6 +400,15 @@ def main():
         ping = r["ping"] if r["ping"] is not None else 9e9
         return (-sc, ping)
     results.sort(key=keyf)
+
+    # ---- сводка ----
+    good = sum(1 for r in results if verdict(r)[1] == 2)
+    warn = sum(1 for r in results if verdict(r)[1] == 1)
+    shown = results if args.top <= 0 else results[:args.top]
+    print(f"{C.BOLD}Проверено: {len(results)}   "
+          f"{C.G}✓ подходит: {good}{C.RST}   "
+          f"{C.Y}⚠ с оговоркой: {warn}{C.RST}   "
+          f"{C.GR}показаны топ-{len(shown)}{C.RST}\n")
 
     # ---- таблица ----
     cols = [("DOMAIN", 26), ("PING", 9), ("TLS1.3", 7), ("H2", 4),
@@ -241,7 +420,7 @@ def main():
     def yn(b):
         return col("OK", C.G) if b else col("NO", C.R)
 
-    for r in results:
+    for r in shown:
         v, _ = verdict(r)
         ping = f"{r['ping']:.0f}ms" if r["ping"] is not None else col("—", C.GR)
         curve = r["curve"]
