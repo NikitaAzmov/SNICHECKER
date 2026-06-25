@@ -30,6 +30,7 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib.request
 
 # --- ГЛОБАЛЬНЫЕ бренды (нейтральны к гео, проверяются всегда) ---
 GLOBAL_DOMAINS = [
@@ -232,6 +233,26 @@ def get_curve(host, port, timeout):
     except Exception:
         pass
     return "?"
+
+
+def server_ip():
+    """внешний IP ноды; при неудаче — локальный IP; иначе 'неизвестно'"""
+    for url in ("https://api.ipify.org", "http://api.ipify.org",
+                "https://ifconfig.me/ip"):
+        try:
+            ip = urllib.request.urlopen(url, timeout=4).read().decode().strip()
+            if ip and len(ip) <= 45:
+                return ip
+        except Exception:
+            pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "неизвестно"
 
 
 def check(host, port, timeout):
